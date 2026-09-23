@@ -1,0 +1,522 @@
+---
+/**
+ * VBScript to PowerShell, in the browser. The open-source build of
+ * https://getrff.com/vbs-to-powershell/
+ *
+ * The converter tokenises, tracks which names are variables vs objects vs functions, and emits
+ * PowerShell matching VBScript's SEMANTICS rather than its spelling. `&` always concatenates, `=`
+ * compares case-SENSITIVELY, `\` is integer division, `True` is -1, Mid/InStr are 1-based, ByRef is
+ * the default. The obvious PowerShell equivalent of each of those is WRONG, not merely uglier, and
+ * wrong in a way that still runs. Lines with no faithful equivalent emit a `# TODO` carrying the
+ * original.
+ *
+ * The engine is src/lib/vbsToPs1.mjs and is byte-identical to the hosted copy. The accuracy
+ * figures in the FAQ are the hosted build's measured numbers; they are not re-measured here.
+ */
+import Layout from '../layouts/Layout.astro';
+import '../styles/tools.css';
+
+const title = 'VBScript to PowerShell Converter - Free, Runs In Your Browser';
+const description =
+  'Drop a .vbs file and get PowerShell back, plus a count of what still needs a human. Handles the ' +
+  'semantics that trip up find-and-replace: & always concatenates, string compares are ' +
+  'case-sensitive, Mid and InStr are 1-based. Nothing is uploaded.';
+
+const faq = [
+  ['Is my script uploaded anywhere?',
+   "No. It's JavaScript running in your browser. No upload, no storage, no account. Watch the network tab if you want, or kill your network first and drop the file anyway. It still works."],
+  ['Can I just run the output?',
+   "Not without reading it first. Work through the # TODOs and test it somewhere you don't mind breaking. You're getting a head start on the port, not a finished script."],
+  ['Why not just swap & for + and be done?',
+   'In VBScript & always concatenates, so "1" & 2 gives you the string "12". In PowerShell "1" + 2 gives you 3. Nothing errors. You just get a number where you used to get a string, and you find out about it somewhere else in the script. The output uses a helper that keeps the VBScript behaviour.'],
+  ['What happens to On Error Resume Next?',
+   'It gets flagged for you to deal with. VBScript carries on at the next statement, and PowerShell has nothing that does that. $ErrorActionPreference = "SilentlyContinue" only quiets non-terminating errors, it won\u2019t resume anything. On a script PDQ or your RMM is grading by exit code, a swallowed error shows up in the console as a successful deployment. What the tool says about it depends on how you told it the script gets deployed.'],
+  ['Why does it ask how the script is deployed?',
+   "Same script, different stakes. A logon script can't block, so a MsgBox buried in one is a real problem. An RMM push is judged entirely on its exit code. A scheduled task runs as SYSTEM with no desktop, so anything waiting on input sits there until the task times out. That changes the verdict and what it tells you about error handling."],
+  ['How accurate is it?',
+   "Across 610 real sysadmin scripts pulled off GitHub: 98% of lines convert, and 94% of whole files come out as PowerShell that parses clean. There's also a 168-case suite that runs the VBScript and the generated PowerShell against the same inputs and compares the values, which is what catches output that runs fine and returns the wrong thing. It passes. None of that tells you your script is OK, so test it."],
+  ['Does it handle Classes, Functions and ByRef?',
+   "Classes and Functions yes, including the implicit return through the function name. ByRef gets flagged, not converted. It's the default in VBScript and it isn't in PowerShell, so a Sub that writes to its argument quietly stops affecting the caller. Where that write is visible, you get the parameter name and the line number."],
+  ['What about encoded .vbe files?',
+   "It reads UTF-16 and BOMs, which covers most of the .vbs files you'll actually run into. Encoded .vbe uses Microsoft's script encoder, and that doesn't get decoded here."],
+];
+
+const siteUrl = (Astro.site ?? new URL('https://getrff.com')).toString();
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication',
+    name: 'VBScript to PowerShell Converter',
+    applicationCategory: 'DeveloperApplication',
+    operatingSystem: 'Any (browser)',
+    description,
+    url: new URL('/vbs-to-powershell/', siteUrl).toString(),
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faq.map(([q, a]) => ({
+      '@type': 'Question', name: q,
+      acceptedAnswer: { '@type': 'Answer', text: a },
+    })),
+  },
+];
+---
+
+<Layout title={title} description={description} jsonLd={jsonLd}>
+  <header class="tool-nav">
+    <a href="/" class="tool-nav-home">VBS to PowerShell</a>
+    <a href="https://getrff.com/tools/" class="tool-nav-by">More free tools &rarr;</a>
+  </header>
+
+  <main class="tools-wrap">
+    <div class="tool-hero">
+      <h1>VBScript to PowerShell</h1>
+      <p class="sub">
+        Drop a <code>.vbs</code> file and get PowerShell back, plus a count of what still needs a
+        human. Lines it can&rsquo;t convert cleanly come back as
+        <span class="vbs-todo-ink">#&nbsp;TODO</span> with your original underneath.
+      </p>
+      <span class="privacy-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Converted in your browser. Nothing is uploaded.
+      </span>
+    </div>
+
+    <label class="drop" id="drop" for="file" tabindex="0">
+      <input id="file" type="file" hidden accept=".vbs,.vbe,.txt,text/plain" />
+      <p id="drop-msg">Drop a .vbs file here, or click to choose</p>
+    </label>
+
+    <div class="vbs-srcbar">
+      <span class="vbs-fname" id="fname"></span>
+      <span class="vbs-grow"></span>
+      <button type="button" class="vbs-link" id="sample">Load a sample script</button>
+      <button type="button" class="vbs-link" id="clear">Clear</button>
+    </div>
+    <textarea id="in" class="vbs-input" spellcheck="false" rows="10"
+      placeholder="...or paste your VBScript here."></textarea>
+    <p class="status" id="status"></p>
+
+    <section id="result" hidden>
+      <div class="vbs-ctx">
+        <label for="ctx">How is this script deployed?</label>
+        <select id="ctx"></select>
+        <span class="vbs-ctx-guess" id="ctx-guess"></span>
+      </div>
+      <div class="vbs-ctx-note" id="ctx-note" hidden></div>
+
+      <div class="vbs-verdict-row">
+        <span class="vbs-verdict" id="verdict"></span>
+        <p class="vbs-detail" id="detail"></p>
+      </div>
+
+      <div class="vbs-facts" id="facts"></div>
+      <div class="vbs-caps" id="caps"></div>
+
+      <h2 class="vbs-h">What needs you</h2>
+      <div id="todos"></div>
+
+      <h2 class="vbs-h">
+        The PowerShell
+        <span class="vbs-h-actions">
+          <button type="button" class="btn" id="copy">Copy</button>
+          <button type="button" class="btn btn-primary" id="dl">Download .ps1</button>
+        </span>
+      </h2>
+      <pre class="vbs-out"><code id="out"></code></pre>
+    </section>
+
+    <div class="tool-prose">
+      <h2>What breaks if you convert it by hand</h2>
+      <p>
+        VBScript and PowerShell look close enough that a text swap compiles. Then it runs, finishes
+        without an error, and gives you a different answer. These are the ones that get people:
+      </p>
+      <ul class="vbs-diffs">
+        <li>
+          <code>&amp;</code> always concatenates. <code>"1" &amp; 2</code> is the string
+          <code>12</code>. Swap it for <code>+</code> and PowerShell hands you <code>3</code>.
+        </li>
+        <li>
+          <code>=</code> on strings is case-sensitive in VBScript. <code>-eq</code> isn&rsquo;t, so a
+          comparison that used to fail starts passing.
+        </li>
+        <li>
+          <code>\</code> is integer division, not a path separator. <code>7 \ 2</code> is
+          <code>3</code>.
+        </li>
+        <li>
+          <code>True</code> is <code>-1</code>. That shows up the moment it hits arithmetic or gets
+          written to a registry value.
+        </li>
+        <li>
+          <code>Mid</code> and <code>InStr</code> count from 1. <code>.Substring</code> and
+          <code>.IndexOf</code> count from 0, and <code>InStr</code> returns 0 for no match where
+          <code>.IndexOf</code> returns -1.
+        </li>
+        <li>
+          <code>ByRef</code> is the default. In PowerShell it isn&rsquo;t, so a <code>Sub</code> that
+          writes to its argument stops affecting the caller.
+        </li>
+      </ul>
+      <p>
+        The output carries one small helper function per behaviour it has to keep, and only the ones
+        your script actually uses. You get a single self-contained <code>.ps1</code> with no module
+        to install.
+      </p>
+
+      <h2>What it flags instead of converting</h2>
+      <p>
+        <code>On Error Resume Next</code>. VBScript carries on at the next statement and PowerShell
+        has nothing that does that. <code>$ErrorActionPreference = "SilentlyContinue"</code> only
+        quiets non-terminating errors and won&rsquo;t resume anything, so on a script PDQ or your RMM
+        grades by exit code, a swallowed error lands in the console as a successful deployment.
+      </p>
+      <p>
+        <code>ByRef</code> parameters that get written to. Where the write is visible in the script
+        you get the parameter name and the line number, so you can decide whether it needs a
+        <code>[ref]</code> or a return value.
+      </p>
+      <p>
+        Everything else it can&rsquo;t do cleanly comes back as a <code>#&nbsp;TODO</code> with your
+        original line underneath. Thirty TODOs means thirty decisions, and it&rsquo;s better to see
+        that number before you start than three days in.
+      </p>
+
+      <h2>Questions</h2>
+      {faq.map(([q, a]) => (
+        <details class="faq"><summary>{q}</summary><p>{a}</p></details>
+      ))}
+    </div>
+    <p class="byline">
+      Built by the <a href="https://getrff.com">RFF</a> team. Hosted at
+      <a href="https://getrff.com/vbs-to-powershell/">getrff.com/vbs-to-powershell</a>.
+      Sister tools: <a href="https://getrff.com/switchhunt/">SwitchHunt</a> (silent install switches)
+      &middot; <a href="https://getrff.com/culprit/">Culprit</a> (why is this PC slow)
+      &middot; <a href="https://getrff.com/denied/">Denied</a> (why does this app crash).
+    </p>
+  </main>
+</Layout>
+
+<script>
+  import {
+    toPowerShell, auditVbs, decodeVbsFile, SCRIPT_CONTEXTS,
+  } from '../lib/vbsToPs1.mjs';
+
+  const $ = (id: string) => document.getElementById(id)!;
+  const esc = (v: string) =>
+    String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+
+  const SAMPLE = [
+    "' Report free disk space on every fixed drive",
+    'Option Explicit',
+    'Const ForAppending = 8',
+    'Dim objWMI, colDisks, objDisk, objFSO, objLog',
+    '',
+    'On Error Resume Next',
+    '',
+    'Set objFSO = CreateObject("Scripting.FileSystemObject")',
+    'Set objLog = objFSO.OpenTextFile("C:\\temp\\disk.log", ForAppending, True)',
+    'Set objWMI = GetObject("winmgmts:\\\\.\\root\\cimv2")',
+    'Set colDisks = objWMI.ExecQuery("Select * from Win32_LogicalDisk Where DriveType = 3")',
+    '',
+    'For Each objDisk In colDisks',
+    '    If objDisk.FreeSpace < 1073741824 Then',
+    '        objLog.WriteLine objDisk.DeviceID & " is low: " & objDisk.FreeSpace',
+    '        WScript.Echo "LOW: " & objDisk.DeviceID',
+    '    Else',
+    '        WScript.Echo "OK: " & objDisk.DeviceID',
+    '    End If',
+    'Next',
+    '',
+    'objLog.Close',
+    'WScript.Quit 0',
+  ].join('\n');
+
+  let currentName = 'converted';
+
+  /** '' means "follow the auto-detected guess". Once the user picks, their choice wins for good -
+   *  they know how they deploy it and the heuristic does not. */
+  let userContext = '';
+
+  /** Auto first, then the contexts in the order the module declares them. */
+  const ctxSel = $('ctx') as HTMLSelectElement;
+  for (const [key, label] of [
+    ['', 'Auto-detect'] as [string, string],
+    ...Object.entries(SCRIPT_CONTEXTS).map(([k, v]) => [k, (v as any).label] as [string, string]),
+  ]) {
+    const o = document.createElement('option');
+    o.value = key; o.textContent = label;
+    ctxSel.appendChild(o);
+  }
+
+  function setStatus(msg: string, bad = false) {
+    const el = $('status');
+    el.textContent = msg;
+    el.className = 'status' + (bad ? ' status-bad' : '');
+  }
+
+  /** The options object every call must share. Copy and Download used to call toPowerShell with no
+   *  options at all, so picking a deployment context changed what was ON SCREEN and not what you
+   *  downloaded - the one thing on this page that has to be the same file. */
+  const opts = () => (userContext ? { context: userContext } : {});
+
+  function renderOpinion(a: any) {
+    const s = a.summary;
+    const applied = (SCRIPT_CONTEXTS as any)[a.appliedContext];
+
+    $('ctx-guess').textContent = userContext
+      ? 'your choice'
+      : a.detectedContext === 'unknown' ? 'could not tell, pick one' : `guessed: ${applied.label}`;
+
+    const note = $('ctx-note');
+    note.hidden = !(applied && applied.note);
+    note.innerHTML = applied && applied.note
+      ? `<strong>${esc(applied.label)}.</strong> ${esc(applied.note)}` : '';
+
+    const v = $('verdict');
+    v.textContent = a.verdict;
+    v.className = 'vbs-verdict vbs-v-' + a.verdict.toLowerCase();
+    $('detail').textContent = a.detail;
+
+    $('facts').innerHTML = [
+      [s.codeLines, 'lines of code'],
+      [s.cleanPct + '%', 'convert with no decision'],
+      [s.needsReview, 'need' + (s.needsReview === 1 ? 's' : '') + ' review'],
+      [s.distinctDecisions, 'distinct pattern' + (s.distinctDecisions === 1 ? '' : 's')],
+    ].map(([n, l]) => `<span class="vbs-fact"><b>${esc(String(n))}</b> <span>${esc(String(l))}</span></span>`).join('');
+
+    $('caps').innerHTML = a.capabilities
+      .map((c: any) => `<span class="vbs-cap" title="${esc(c.note)}">${esc(c.key)}</span>`).join('');
+
+    const shown = a.blockers.slice(0, 8);
+    $('todos').innerHTML = shown.length
+      ? shown.map((b: any) => `
+          <div class="vbs-todo">
+            <div class="vbs-todo-where">line ${esc(String(b.line))} &middot; ${esc(b.rule)}</div>
+            <code>${esc(String(b.text).slice(0, 150))}</code>
+            ${b.reason ? `<p>${esc(b.reason)}</p>` : ''}
+          </div>`).join('') +
+        (a.blockers.length > shown.length
+          ? `<p class="vbs-detail">...and ${a.blockers.length - shown.length} more, marked inline below.</p>`
+          : '')
+      : '<p class="vbs-detail">Nothing. Every construct here has a direct equivalent. Still test it.</p>';
+  }
+
+  function render() {
+    const src = ($('in') as HTMLTextAreaElement).value;
+    if (!src.trim()) {
+      ($('result') as HTMLElement).hidden = true;
+      setStatus('');
+      return;
+    }
+    ($('result') as HTMLElement).hidden = false;
+    try {
+      renderOpinion(auditVbs(src, opts()));
+      const ps = toPowerShell(src, opts());
+      // TODO lines and their echoed original are the point of the output, so they are coloured;
+      // everything else stays plain rather than half-highlighted, which reads as a broken editor.
+      $('out').innerHTML = ps.split('\n').map(l =>
+        l.startsWith('# TODO') || l.startsWith('#   ') ? `<span class="vbs-t-todo">${esc(l)}</span>`
+        : l.trimStart().startsWith('#') ? `<span class="vbs-t-cmt">${esc(l)}</span>`
+        : esc(l)).join('\n');
+      setStatus('');
+    } catch {
+      ($('result') as HTMLElement).hidden = true;
+      setStatus('Could not read that as VBScript. If it is an encoded .vbe, it has to be decoded first.', true);
+    }
+  }
+
+  function loadFile(file: File) {
+    if (!file) return;
+    currentName = file.name.replace(/\.(vbs|vbe|txt)$/i, '') || 'converted';
+    $('fname').textContent = file.name;
+    setStatus('Reading ' + file.name + '\u2026');
+    // decodeVbsFile lives in the module so it can be unit-tested against real UTF-16 bytes: most
+    // .vbs files written by a Windows tool are UTF-16LE with a BOM, and reading them as UTF-8
+    // gives you a string with a NUL between every character that converts to nothing at all.
+    file.arrayBuffer().then(buf => {
+      ($('in') as HTMLTextAreaElement).value = decodeVbsFile(buf);
+      render();
+    }).catch(() => setStatus('Could not read that file. Try another.', true));
+  }
+
+  $('in').addEventListener('input', render);
+  ctxSel.addEventListener('change', e => {
+    userContext = (e.target as HTMLSelectElement).value;
+    render();
+  });
+  $('sample').addEventListener('click', () => {
+    ($('in') as HTMLTextAreaElement).value = SAMPLE;
+    currentName = 'disk-report';
+    $('fname').textContent = 'sample script';
+    render();
+  });
+  $('clear').addEventListener('click', () => {
+    ($('in') as HTMLTextAreaElement).value = '';
+    currentName = 'converted';
+    $('fname').textContent = '';
+    render();
+  });
+
+  $('copy').addEventListener('click', () => {
+    navigator.clipboard.writeText(toPowerShell(($('in') as HTMLTextAreaElement).value, opts())).then(() => {
+      const b = $('copy');
+      b.textContent = 'Copied';
+      setTimeout(() => (b.textContent = 'Copy'), 1200);
+    });
+  });
+
+  $('dl').addEventListener('click', () => {
+    const blob = new Blob([toPowerShell(($('in') as HTMLTextAreaElement).value, opts())], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${currentName}.ps1`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  const drop = $('drop'), fileInput = $('file') as HTMLInputElement;
+  fileInput.addEventListener('change', () => { const f = fileInput.files?.[0]; if (f) loadFile(f); });
+
+  // 'drag' is the class tools.css styles. Depth COUNTER rather than a plain add/remove pair:
+  // dragleave also fires crossing onto the <p> inside the zone, so a bare toggle drops the
+  // highlight while the file is still over the target.
+  let dragDepth = 0;
+  const setDrag = (on: boolean) => drop.classList.toggle('drag', on);
+
+  drop.addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; setDrag(true); });
+  drop.addEventListener('dragover', e => {
+    e.preventDefault();
+    const dt = (e as DragEvent).dataTransfer;
+    if (dt) dt.dropEffect = 'copy';
+    setDrag(true);
+  });
+  drop.addEventListener('dragleave', e => {
+    e.preventDefault();
+    if (--dragDepth <= 0) { dragDepth = 0; setDrag(false); }
+  });
+  drop.addEventListener('drop', e => {
+    e.preventDefault();
+    dragDepth = 0; setDrag(false);
+    const f = (e as DragEvent).dataTransfer?.files?.[0];
+    if (f) loadFile(f);
+  });
+</script>
+
+<style>
+  /* Template-resident nodes only. Everything under #result is built with innerHTML and carries no
+     data-astro-cid, so its rules have to be global - see the block below. */
+  .status { font-size: 13px; color: var(--ink-2); min-height: 20px; margin: 10px 0 0; }
+  .status-bad { color: var(--danger); }
+  .vbs-todo-ink { color: var(--warning); font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  .tool-nav-home { font-weight: 700; color: var(--ink); text-decoration: none; }
+</style>
+
+{/*
+  Global, every selector confined to the page's own ids/prefix so nothing escapes. Same reason as
+  intune-detection: the result area is assembled with innerHTML, which Astro's scoped selectors
+  cannot reach, and a page whose entire output renders unstyled is the bug that keeps recurring here.
+*/}
+<style is:global>
+  /* The semantic gotchas read as a checklist an admin scans, not a paragraph they parse. Each item
+     is one rule and its consequence, so a skim still lands on the part that bites. */
+  .vbs-diffs { margin: 0 0 18px; padding-left: 20px; }
+  .vbs-diffs li { margin: 9px 0; line-height: 1.65; text-wrap: pretty; }
+
+  .vbs-srcbar { display: flex; align-items: center; gap: 12px; margin: 14px 0 0; }
+  .vbs-grow { flex: 1; }
+  .vbs-fname {
+    font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; color: var(--ink-2);
+    word-break: break-all;
+  }
+  .vbs-link {
+    background: none; border: 0; padding: 0; cursor: pointer; font: inherit; font-size: 12.5px;
+    color: var(--ink-3); text-decoration: underline; text-underline-offset: 3px;
+  }
+  .vbs-link:hover { color: var(--ink); }
+
+  .vbs-input {
+    display: block; width: 100%; margin: 8px 0 0; padding: 12px 14px; resize: vertical;
+    border: 1px solid var(--border-strong); border-radius: 10px;
+    background: var(--surface); color: var(--ink);
+    font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; line-height: 1.55;
+  }
+  .vbs-input:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; border-color: var(--brand); }
+
+  #result { margin-top: 24px; }
+
+  /* The context picker changes the ADVICE and, for an RMM-deployed script, whether On Error Resume
+     Next is treated as a defect. It is not a cosmetic filter, so it does not read as one. */
+  .vbs-ctx { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; }
+  .vbs-ctx label { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .vbs-ctx select {
+    padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border-strong);
+    background: var(--surface); color: var(--ink); font: inherit; font-size: 13px;
+  }
+  .vbs-ctx select:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; border-color: var(--brand); }
+  .vbs-ctx-guess { font-size: 12px; color: var(--ink-3); }
+
+  .vbs-ctx-note {
+    font-size: 13px; line-height: 1.6; text-wrap: pretty; color: var(--ink-2);
+    background: var(--surface-alt); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin: 0 0 16px;
+  }
+  .vbs-ctx-note[hidden] { display: none; }
+  .vbs-ctx-note strong { color: var(--ink); }
+
+  .vbs-verdict-row { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; margin: 0 0 12px; }
+  .vbs-verdict {
+    flex-shrink: 0; padding: 4px 12px; border-radius: 999px;
+    font-size: 12.5px; font-weight: 700; white-space: nowrap;
+  }
+  /* Four verdicts, three colours: "mechanical" and "straightforward" are both good news and only
+     differ in how much reading is left. */
+  .vbs-v-mechanical, .vbs-v-straightforward { background: var(--success-bg); color: var(--success); }
+  .vbs-v-moderate { background: var(--warning-bg); color: var(--warning); }
+  .vbs-v-rewrite { background: var(--danger-bg); color: var(--danger); }
+  .vbs-detail { font-size: 13px; line-height: 1.6; color: var(--ink-2); margin: 0; text-wrap: pretty; }
+
+  .vbs-facts { display: flex; gap: 20px; flex-wrap: wrap; margin: 0 0 12px; font-size: 13px; }
+  .vbs-fact b { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink); }
+  .vbs-fact span { color: var(--ink-2); }
+
+  .vbs-caps { display: flex; flex-wrap: wrap; gap: 6px; }
+  .vbs-cap {
+    padding: 3px 9px; border-radius: 999px; font-size: 11.5px; color: var(--ink-2); cursor: help;
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+  }
+
+  .vbs-h {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--ink-3); margin: 26px 0 10px;
+  }
+  .vbs-h-actions { margin-left: auto; display: flex; gap: 8px; }
+
+  /* A left rule in warning colour, because each of these is a decision the tool declined to make
+     for you rather than an error it hit. */
+  .vbs-todo {
+    border-left: 2px solid var(--warning); padding: 2px 0 2px 12px; margin: 10px 0;
+  }
+  .vbs-todo-where { font-size: 11.5px; color: var(--ink-3); }
+  .vbs-todo code {
+    font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: var(--ink);
+    word-break: break-all;
+  }
+  .vbs-todo p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); text-wrap: pretty; }
+
+  .vbs-out {
+    font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; line-height: 1.6;
+    background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 10px;
+    overflow-x: auto; max-height: 70vh; overflow-y: auto; margin: 0;
+    white-space: pre; tab-size: 4;
+  }
+  .vbs-out code { font-family: inherit; background: none; padding: 0; color: inherit; }
+  /* Fixed against the dark code background, not theme tokens: these sit on #0f172a in both themes,
+     so a token that flips with the theme would go unreadable in one of them. */
+  .vbs-t-todo { color: #fbbf24; }
+  .vbs-t-cmt { color: #64748b; }
+</style>

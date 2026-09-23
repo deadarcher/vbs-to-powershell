@@ -1,0 +1,8 @@
+services:
+  vbs-to-powershell:
+    build: .
+    image: vbs-to-powershell
+    container_name: vbs-to-powershell
+    ports:
+      - "8080:80"
+    restart: unless-stopped

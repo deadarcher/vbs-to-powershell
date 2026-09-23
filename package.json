@@ -1,0 +1,25 @@
+{
+  "name": "vbs-to-powershell",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Convert VBScript to PowerShell in the browser, keeping the semantics a find-and-replace breaks. 100% client-side - nothing is uploaded.",
+  "license": "MIT",
+  "homepage": "https://getrff.com/vbs-to-powershell/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deadarcher/vbs-to-powershell.git"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "check:parity": "node scripts/check-lib-parity.mjs"
+  },
+  "dependencies": {
+    "astro": "^5.16.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

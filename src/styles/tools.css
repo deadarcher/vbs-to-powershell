@@ -1,0 +1,350 @@
+/*
+ * Shared chrome for the free tools (Culprit, WorksOnMine, Hardened) and the /tools/ index.
+ *
+ * These pages mirror SwitchHunt: a standalone tool, minimal header, server-rendered marketing
+ * prose + FAQ for SEO, and a vanilla <script> that drives the interactive part using the
+ * framework-agnostic cores in src/lib. This file is the visual language shared across the three
+ * so they read as one suite.
+ *
+ * Fills the few semantic colours the global palette lacks (danger-bg, info, info-bg); everything
+ * else reuses the site variables so the tools match the rest of getrff.com.
+ */
+
+:root {
+  --danger-bg: #FEE7E7;
+  --info:      #2563EB;
+  --info-bg:   #E6EEFE;
+}
+
+/* ── standalone tool header (no marketing nav) ─────────────────────────────── */
+.tool-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  max-width: 960px; margin: 0 auto; padding: 16px 20px;
+}
+.tool-nav-by { font-size: 14px; color: var(--brand); font-weight: 600; text-decoration: none; }
+.tool-nav-by:hover { text-decoration: underline; }
+
+.tools-wrap { max-width: 960px; margin: 0 auto; padding: 8px 20px 72px; }
+
+.tool-hero h1 { font-size: 34px; line-height: 1.12; letter-spacing: -0.02em; margin: 8px 0 12px; }
+.tool-hero .sub { font-size: 17px; color: var(--ink-2); line-height: 1.55; max-width: 680px; margin: 0 0 18px; }
+
+/* privacy badge - the whole pitch, so it is loud and near the top */
+.privacy-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 13px; border-radius: 999px;
+  background: var(--success-bg); color: var(--success);
+  font-size: 13px; font-weight: 600; margin-bottom: 22px;
+}
+.privacy-badge svg { width: 14px; height: 14px; }
+
+/* ── panels / steps ────────────────────────────────────────────────────────── */
+.panel {
+  margin-top: 22px; padding: 20px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+}
+.panel > h2 { font-size: 17px; font-weight: 700; margin: 0 0 14px; display: flex; align-items: center; gap: 9px; }
+.panel .step-n {
+  width: 22px; height: 22px; border-radius: 999px; background: var(--brand); color: #fff;
+  font-size: 12px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.panel p { font-size: 13.5px; color: var(--ink-2); line-height: 1.55; margin: 0 0 12px; }
+.panel p:last-child { margin-bottom: 0; }
+
+/* ── script block (copy + download) ────────────────────────────────────────── */
+.script-actions { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.btn {
+  padding: 7px 13px; border-radius: 8px; border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--ink); font-size: 13px; font-weight: 600; cursor: pointer;
+  font-family: inherit;
+}
+.btn:hover { background: var(--surface-hover); }
+.btn-primary { background: var(--brand); color: #fff; border-color: var(--brand); }
+.btn-primary:hover { background: var(--brand-light); }
+pre.script {
+  margin: 0; padding: 14px; border-radius: 9px; background: var(--surface-hover);
+  border: 1px solid var(--border); font-size: 12px; line-height: 1.5; overflow-x: auto;
+  max-height: 320px; color: var(--ink-2);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* ── dropzone / paste ──────────────────────────────────────────────────────── */
+/* The drop target is the tool's main verb, so it gets real presence - a thin strip reads as
+   an afterthought next to the panels around it. */
+.drop {
+  display: block; border: 1.5px dashed var(--border-strong); background: var(--surface);
+  border-radius: 12px; padding: 46px 24px; margin-bottom: 8px; text-align: center; cursor: pointer;
+  /* So .drop.drag fades in rather than snapping - the highlight is the only confirmation the zone
+     accepted the drag, and an instant flip reads as a glitch. Shared by every tool page. */
+  transition: border-color .13s ease, background-color .13s ease;
+}
+.drop.drag { border-color: var(--brand); background: var(--brand-bg); }
+.drop p { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink-2); }
+textarea.paste {
+  width: 100%; min-height: 90px; padding: 10px; border-radius: 8px; border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--ink); font-size: 12px; resize: vertical;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.field-label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 7px; }
+/* Single-line sibling of textarea.paste, for inputs where the value is one short token (a build
+   number). Monospace because the whole point is that the digits are read carefully. */
+input.paste-line {
+  width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--ink); font-size: 14px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+input.paste-line:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
+/* A published SHA-256. 64 hex characters, so it MUST be allowed to wrap - overflowing the panel
+   or scrolling sideways makes it unusable for the one thing it is for, which is comparing it
+   against what Get-FileHash printed. */
+.hash {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11.5px; line-height: 1.6; color: var(--ink-2);
+  word-break: break-all; user-select: all;
+}
+
+/* Failure state. Deliberately styled like .read-error rather than like a result: a check that
+   could not run must not resemble a check that came back clean. */
+.err {
+  margin: 12px 0 0; padding: 11px; border-radius: 8px;
+  background: var(--danger-bg); color: var(--danger); font-size: 13px; line-height: 1.5;
+}
+.read-error, .parse-error {
+  margin: 10px 0 0; padding: 11px; border-radius: 8px; background: var(--danger-bg); color: var(--danger);
+  font-size: 13px; line-height: 1.5;
+}
+
+/* ── the headline answer card ──────────────────────────────────────────────── */
+.answer {
+  margin-top: 26px; padding: 22px; border-radius: 12px;
+  background: var(--surface); border: 2px solid var(--brand);
+}
+.answer .kick { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); font-weight: 700; margin: 0 0 8px; }
+.answer .verdict { font-size: 19px; line-height: 1.45; margin: 0; font-weight: 600; }
+.answer .meta { font-size: 12.5px; color: var(--ink-3); margin: 14px 0 0; }
+
+/* ── finding cards ─────────────────────────────────────────────────────────── */
+.finding { padding: 15px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); }
+.finding + .finding { margin-top: 10px; }
+.finding-head { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; flex-wrap: wrap; }
+.pill { padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.pill-critical { background: var(--danger-bg); color: var(--danger); }
+.pill-warn { background: var(--warning-bg); color: var(--warning); }
+.pill-info { background: var(--info-bg); color: var(--info); }
+.pill-ok { background: var(--success-bg); color: var(--success); }
+.finding-area { font-size: 12px; color: var(--ink-3); font-weight: 600; }
+.finding h3 { font-size: 14.5px; font-weight: 600; margin: 0 0 5px; line-height: 1.4; }
+.finding .evidence { font-size: 13px; color: var(--ink-2); margin: 0; line-height: 1.55; }
+.finding ul { margin: 10px 0 0; padding-left: 18px; font-size: 13px; color: var(--ink-2); line-height: 1.6; }
+.finding .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; color: var(--ink-2); margin: 0 0 7px; }
+
+/* ── stats row ─────────────────────────────────────────────────────────────── */
+.stats { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 18px; }
+.stat .v { font-size: 26px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.stat .l { font-size: 11.5px; color: var(--ink-3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+
+/* ── tables ────────────────────────────────────────────────────────────────── */
+.proc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 22px; }
+.proc-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.proc-tbl td { padding: 7px 0; }
+.proc-tbl tr + tr td { border-top: 1px solid var(--border); }
+.proc-tbl td:last-child { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.proc-note { font-size: 12px; color: var(--ink-3); margin: 0 0 10px; line-height: 1.45; }
+.proc-head { font-size: 13.5px; font-weight: 700; margin: 0 0 4px; }
+
+/* ── charts ────────────────────────────────────────────────────────────────── */
+.chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+.chart-title { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+.chart-title h3 { font-size: 13px; font-weight: 700; margin: 0; }
+.chart-title span { font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.chart svg { display: block; width: 100%; background: var(--surface-hover); border-radius: 8px; border: 1px solid var(--border); }
+
+/* ── capture builder (perf) ────────────────────────────────────────────────── */
+.builder-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 18px; }
+.builder-grid label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+.builder-grid input[type=range] { width: 100%; accent-color: var(--brand); }
+.builder-hint { font-size: 12px; color: var(--ink-3); margin: 6px 0 0; line-height: 1.45; }
+.seg { display: flex; gap: 8px; }
+.seg button {
+  flex: 1; padding: 7px 0; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink); font-family: inherit;
+}
+.seg button.on { border-color: var(--brand); background: var(--brand-bg); color: var(--brand); }
+.areas { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 9px; margin-bottom: 14px; }
+.area {
+  display: flex; gap: 9px; padding: 11px; border-radius: 9px; cursor: pointer; align-items: flex-start;
+  border: 1px solid var(--border); background: var(--surface);
+}
+.area.on { border-color: var(--brand); background: var(--brand-bg); }
+.area input { margin-top: 2px; accent-color: var(--brand); }
+.area .a-name { display: block; font-size: 13px; font-weight: 700; }
+.area .a-hint { display: block; font-size: 12px; color: var(--ink-2); line-height: 1.45; margin-top: 2px; }
+
+/* ── filter toggles (drift / baseline) ─────────────────────────────────────── */
+.filters { display: flex; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+.filters input[type=text] {
+  flex: 1 1 220px; padding: 7px 11px; border-radius: 8px; border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--ink); font-size: 13px; font-family: inherit;
+}
+.toggle-check { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+/* ── drift rows ────────────────────────────────────────────────────────────── */
+.drow { padding: 13px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg); }
+.drow + .drow { margin-top: 9px; }
+.drow-key { margin: 0 0 3px; font-size: 12.5px; font-family: 'JetBrains Mono', ui-monospace, monospace; color: var(--ink-2); word-break: break-all; }
+.drow-name { margin: 0 0 9px; font-size: 13.5px; font-weight: 700; }
+.vcell-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.vcell { padding: 9px; border-radius: 7px; background: var(--surface); border: 1px solid var(--border); }
+.vcell .m { margin: 0 0 3px; font-size: 11px; color: var(--ink-3); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.vcell .v { margin: 0; font-size: 13px; font-family: 'JetBrains Mono', ui-monospace, monospace; word-break: break-all; }
+.vcell .g { margin: 5px 0 0; font-size: 11.5px; color: var(--brand); font-weight: 600; }
+.note-list { margin: 12px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--ink-3); line-height: 1.6; }
+.warn-list { margin: 14px 0 0; padding-left: 18px; font-size: 13px; color: var(--warning); line-height: 1.6; }
+.blocker-list { margin: 14px 0 0; padding-left: 18px; font-size: 13px; color: var(--danger); line-height: 1.6; font-weight: 500; }
+
+/* ── funnel panel ──────────────────────────────────────────────────────────── */
+.funnel { margin-top: 48px; padding: 22px; border-radius: 12px; background: var(--brand-bg); border: 1px solid var(--border); }
+.funnel h2 { font-size: 17px; font-weight: 700; margin: 0 0 6px; }
+.funnel p { font-size: 14px; color: var(--ink-2); margin: 0 0 14px; line-height: 1.55; max-width: 660px; }
+
+/* ── SEO prose blocks under the tool ───────────────────────────────────────── */
+.tool-prose { margin-top: 44px; }
+.tool-prose h2 { font-size: 22px; margin: 32px 0 12px; letter-spacing: -0.01em; }
+.tool-prose h3 { font-size: 17px; margin: 22px 0 8px; }
+.tool-prose p, .tool-prose li { font-size: 15px; color: var(--ink-2); line-height: 1.65; }
+.tool-prose ul { padding-left: 20px; }
+.tool-prose a { color: var(--brand); }
+
+.disclosure { margin-top: 22px; padding: 18px; border-radius: 12px; background: var(--surface-hover); border: 1px solid var(--border); }
+.disclosure h2 { font-size: 14.5px; font-weight: 700; margin: 0 0 8px; }
+.disclosure p { font-size: 13px; color: var(--ink-2); margin: 0 0 9px; line-height: 1.6; }
+.disclosure p:last-child { margin-bottom: 0; }
+
+.hidden { display: none !important; }
+
+/* Closing byline. Mirrors the identical rule in switchhunt.astro's scoped <style> so every tool
+   page ends the same way; that copy stays where it is because the page predates this file. */
+.byline {
+  margin: 40px 0 0; padding-top: 24px; border-top: 1px solid var(--border);
+  font-size: 14px; color: var(--ink-3); line-height: 1.6;
+}
+.byline a { color: var(--brand); text-decoration: underline; text-underline-offset: 2px; }
+
+/* ── tools index cards ─────────────────────────────────────────────────────── */
+.tool-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.tool-card {
+  display: block; padding: 22px; border-radius: 12px; background: var(--surface);
+  border: 1px solid var(--border); text-decoration: none; color: inherit;
+}
+.tool-card:hover { border-color: var(--brand-border); background: var(--surface-hover); }
+.tool-card .wraps { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); font-weight: 700; margin: 0 0 7px; }
+.tool-card h2 { font-size: 18px; font-weight: 700; margin: 0 0 8px; }
+.tool-card p { font-size: 13.5px; color: var(--ink-2); margin: 0; line-height: 1.55; }
+/* The spoken-phrase line under a tool's name - it is what the tool is FOR, where the name is
+   only what it is called. Named tools need this; a descriptive title would not. */
+.tool-card .tool-card-tag { font-size: 13.5px; color: var(--ink); font-weight: 600; margin: 0 0 6px; }
+
+/* ── procmon analyzer (denied) ─────────────────────────────────────────────── */
+.scenario-seg { flex-wrap: wrap; margin-bottom: 10px; }
+.scenario-seg button { flex: 1 1 180px; }
+
+/* Capture recipes are INSTRUCTIONS, not code - a mono <pre> made them harder to read, not
+   easier. Real list typography, with only the actual values (keys, exe names, filter fields)
+   set off as chips. */
+.recipe-box { padding: 18px 22px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); }
+ol.recipe { margin: 0; padding-left: 24px; }
+ol.recipe li { font-size: 14.5px; color: var(--ink); line-height: 1.75; margin-bottom: 12px; }
+ol.recipe li:last-child { margin-bottom: 0; }
+ol.recipe li::marker { color: var(--brand); font-weight: 700; }
+.recipe-note { font-size: 13px; color: var(--ink-3); margin: 4px 0 0; line-height: 1.55; }
+.recipe-tail { font-size: 13.5px; color: var(--ink-2); margin: 14px 0 0; line-height: 1.7; }
+.recipe-box kbd {
+  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--border-strong); border-bottom-width: 2px;
+  border-radius: 6px; padding: 1px 7px; white-space: nowrap;
+}
+.recipe-box code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; color: var(--ink);
+  background: var(--surface-hover); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px;
+}
+.fseq { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 3px 0; vertical-align: middle; }
+.fchip {
+  font-size: 12.5px; font-weight: 600; color: var(--brand); background: var(--brand-bg);
+  border-radius: 6px; padding: 2px 9px; white-space: nowrap;
+}
+.fop { font-size: 12.5px; color: var(--ink-3); }
+.progress {
+  height: 8px; border-radius: 999px; background: var(--surface-hover);
+  border: 1px solid var(--border); overflow: hidden; margin-top: 10px;
+}
+.progress i { display: block; height: 100%; width: 0%; background: var(--brand); transition: width 0.15s; }
+.mono-items { margin-top: 9px; }
+.finding .mono { word-break: break-all; margin: 0 0 5px; }
+.cmd {
+  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px;
+  color: var(--ink-3); margin: 4px 0 0; word-break: break-all; line-height: 1.45;
+}
+.dim { color: var(--ink-3); font-size: 12px; font-weight: 400; }
+
+/* Links inside a panel have to LOOK like links. global.css sets `a { color: inherit }`, so every
+   plain <a> in a tool panel rendered as body text - the GitHub and raw-file links on this page, and
+   the "Open an issue" / repo links on hardened, sprawl and culprit, all of which are the exact
+   links these pages exist to offer.
+   `:not([class])` on purpose: .dl is a solid brand-filled button with white text, and a bare
+   `.panel a` rule is MORE specific than `.dl`, so it would repaint that button's label purple. */
+.panel a:not([class]) {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.panel a:not([class]):hover { text-decoration-thickness: 2px; }
+
+/* Source excerpt shown before download. NOT .cmd: that one has word-break:break-all for short
+   one-liners, which mangles indented code. Code keeps its whitespace and scrolls instead, and the
+   height cap stops a 70-line block burying the rest of the page once expanded. */
+.source-peek {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11.5px; line-height: 1.5;
+  color: var(--ink-2); background: var(--surface-2, rgba(0, 0, 0, 0.03));
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px 14px; margin: 10px 0 0;
+  max-height: 22rem; overflow: auto;
+  white-space: pre; word-break: normal; tab-size: 4;
+}
+.noise-tbl td, .started-tbl td { vertical-align: top; }
+.noise-tbl td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.noise-tbl code { font-size: 12px; }
+/* meaning/notes cells are prose, not metrics - undo the numeric-cell styling */
+.noise-tbl td:last-child { text-align: left; font-weight: 400; }
+
+/* ── download link + FAQ ───────────────────────────────────────────────────────
+ * Added 2026-09-18. disk-reclaim.astro and reboot-why.astro both used .dl and .faq and NEITHER was
+ * defined anywhere, so those pages rendered as unstyled documents. Nothing caught it because both
+ * were noindex/unreleased, which is exactly the blind spot an unreleased flag creates: the page
+ * builds, deploys and 200s, and no one looks at it until the day it goes public.
+ * Defined HERE rather than per page because two pages already need them and a third would copy. */
+.dl {
+  display: inline-block; margin-top: 10px; padding: 9px 16px; border-radius: 8px;
+  background: var(--brand); color: #fff; font-size: 14px; font-weight: 600; text-decoration: none;
+}
+.dl:hover { background: var(--brand-light); }
+
+.faq { margin-top: 28px; }
+.faq h2 { font-size: 20px; margin-bottom: 8px; }
+.faq details {
+  border-bottom: 1px solid var(--border); padding: 12px 0;
+}
+.faq summary {
+  cursor: pointer; font-weight: 600; font-size: 15px; color: var(--ink);
+  list-style: none; display: flex; align-items: center; gap: 8px;
+}
+/* The default marker sits on a different baseline in every browser, so it is replaced rather than
+ * restyled - a caret that jumps as the panel opens reads as a rendering bug. */
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::before { content: '\25B8'; color: var(--ink-3); transition: transform .15s ease; }
+.faq details[open] summary::before { transform: rotate(90deg); }
+.faq details p { margin: 10px 0 0; color: var(--ink-2); line-height: 1.6; }
+
+@media (max-width: 560px) {
+  .tool-hero h1 { font-size: 27px; }
+}
